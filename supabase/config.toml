@@ -1,0 +1,32 @@
+# =============================================
+# CONFIGURAÇÃO DO SUPABASE CLI
+# =============================================
+# Este arquivo é usado pelo Supabase CLI para deploy.
+#
+# project_id: ID do projeto Supabase
+#
+# verify_jwt = false: Desabilita verificação automática de JWT do Supabase Auth.
+# Usamos sistema JWT customizado - cada Edge Function faz sua própria
+# validação via validateToken() no auth-utils.ts.
+# Se fosse true, o Supabase exigiria token do Supabase Auth antes de executar.
+# =============================================
+
+project_id = "mkcskpmohwkelhiterzh"
+
+[functions.cnpj-extractor]
+verify_jwt = false
+
+[functions.ai-rewrite]
+verify_jwt = false
+
+[functions.apify-scraper]
+verify_jwt = false
+
+[functions.evolution-api]
+verify_jwt = false
+
+[functions.process-scheduled-dispatches]
+verify_jwt = false
+
+[functions.signup]
+verify_jwt = false
