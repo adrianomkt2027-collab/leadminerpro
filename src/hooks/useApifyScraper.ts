@@ -62,6 +62,7 @@ export function useApifyScraper() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro ao executar mineração";
       setError(message);
+      return null;
     } finally {
       setLoading(false);
     }
