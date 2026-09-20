@@ -33,3 +33,6 @@ O repositório é integrado ao Vercel. Commits na branch `main` podem acionar o 
 npm install
 npm run dev
 ```
+
+
+<!-- Vercel deployment trigger: Supabase target ejpvovdixjcsrjgasrym -->
