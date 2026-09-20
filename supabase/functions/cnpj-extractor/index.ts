@@ -248,60 +248,60 @@ serve(async (req) => {
 
     console.log(`Found ${cnpjs.length} cnpjs, total: ${total}`);
 
-    // For each CNPJ, fetch details from Brasil API (free, no CloudFlare)
-    const companies = [];
-    for (const empresa of cnpjs) {
-      const cnpjNum = (empresa.cnpj || "") as string;
-      if (!cnpjNum) continue;
+    // Fetch Brasil API details with bounded concurrency. The previous sequential
+    // implementation could take several minutes for one page and hit Edge Function
+    // time limits. Five concurrent requests keeps latency bounded while avoiding
+    // an aggressive burst against the public API.
+    const companies: ReturnType<typeof parseBrasilApiDetail>[] = [];
+    const isMobile = (d: string) => {
+      if (!d) return false;
+      const national = d.startsWith("55") ? d.slice(2) : d;
+      return (
+        (national.length === 11 && national[2] === "9") ||
+        (national.length === 10 && national[2] === "9")
+      );
+    };
 
-      const detail = await fetchBrasilApiDetail(cnpjNum);
-      if (detail) {
-        const parsed = parseBrasilApiDetail(detail, cnpjNum);
-        
-        // Filter: if com_telefone, skip companies without any phone
+    for (let i = 0; i < cnpjs.length; i += 5) {
+      const batch = cnpjs.slice(i, i + 5);
+      const details = await Promise.all(
+        batch.map(async (empresa) => {
+          const cnpjNum = String(empresa.cnpj || "");
+          if (!cnpjNum) return null;
+          const detail = await fetchBrasilApiDetail(cnpjNum);
+          return detail ? parseBrasilApiDetail(detail, cnpjNum) : null;
+        })
+      );
+
+      for (const parsed of details) {
+        if (!parsed) continue;
+
         if (com_telefone && !parsed.telefone1) {
           console.log(`⏭️ Sem telefone: ${parsed.razao_social.substring(0, 30)}`);
           continue;
         }
-        
-        // Filter: if somente_celular, only keep mobile numbers
+
         if (somente_celular) {
           const digits1 = parsed.telefone1.replace(/\D/g, "");
-          // Brazilian mobile: after country code 55, DDD(2 digits) + number
-          // Mobile numbers start with 9 after DDD. Can be 10 digits (old format) or 11 digits (new format)
-          const isMobile = (d: string) => {
-            if (!d) return false;
-            const national = d.startsWith("55") ? d.slice(2) : d;
-            // 11 digits: DDD(2) + 9-digit mobile (starts with 9)
-            if (national.length === 11 && national[2] === "9") return true;
-            // 10 digits: DDD(2) + 8-digit number (starts with 9 = mobile)
-            if (national.length === 10 && national[2] === "9") return true;
-            return false;
-          };
           if (!isMobile(digits1)) {
             const digits2 = parsed.telefone2.replace(/\D/g, "");
             if (digits2 && isMobile(digits2)) {
               parsed.telefone1 = parsed.telefone2;
               parsed.telefone2 = digits1 ? `55${digits1}` : "";
             } else {
-              console.log(`⏭️ Sem celular: ${parsed.razao_social.substring(0, 30)} - Tel: ${parsed.telefone1}`);
+              console.log(`⏭️ Sem celular: ${parsed.razao_social.substring(0, 30)}`);
               continue;
             }
           }
         }
-        
+
         companies.push(parsed);
         console.log(`✅ ${parsed.razao_social.substring(0, 30)} - Tel: ${parsed.telefone1 || "N/A"}`);
-      } else {
-        // Fallback without detail - skip if filters require phone
-        if (com_telefone || somente_celular) {
-          console.log(`⏭️ Fallback sem detalhe para ${cnpjNum}, pulando`);
-          continue;
-        }
       }
 
-      // Small delay between Brasil API requests
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      if (i + 5 < cnpjs.length) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
     }
 
     console.log(`Final: ${companies.length} companies, ${companies.filter(c => c.telefone1).length} with phone`);
