@@ -166,7 +166,7 @@ const CnpjExtractor = () => {
                   onChange={(e) => setCnaeSearch(e.target.value)}
                   disabled={extractor.loadingCnaes}
                 />
-                <Select value={cnaeCode} onValueChange={setCnaeCode}>
+                <Select value={cnaeCode} onValueChange={(value) => setCnaeCode(value === "__none__" ? "" : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder={extractor.loadingCnaes ? "Carregando CNAEs..." : "Selecione o CNAE"} />
                   </SelectTrigger>
@@ -200,7 +200,7 @@ const CnpjExtractor = () => {
                 {/* Município */}
                 <div className="space-y-2">
                   <Label>Município</Label>
-                  <Select value={municipio} onValueChange={setMunicipio} disabled={!uf || extractor.loadingMunicipios}>
+                  <Select value={municipio} onValueChange={(value) => setMunicipio(value === "__none__" ? "" : value)} disabled={!uf || extractor.loadingMunicipios}>
                     <SelectTrigger>
                       <SelectValue
                         placeholder={
