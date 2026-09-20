@@ -1,16 +1,4 @@
-# =============================================
-# CONFIGURAÇÃO DO SUPABASE CLI
-# =============================================
-# Este arquivo é usado pelo Supabase CLI para deploy.
-#
-# project_id: ID do projeto Supabase
-#
-# verify_jwt = false: Desabilita verificação automática de JWT do Supabase Auth.
-# Usamos sistema JWT customizado - cada Edge Function faz sua própria
-# validação via validateToken() no auth-utils.ts.
-# Se fosse true, o Supabase exigiria token do Supabase Auth antes de executar.
-# =============================================
-
+# Supabase CLI configuration for LEAD MINER PRO
 project_id = "ejpvovdixjcsrjgasrym"
 
 [functions.cnpj-extractor]
