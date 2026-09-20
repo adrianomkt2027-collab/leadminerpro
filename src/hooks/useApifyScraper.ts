@@ -45,7 +45,7 @@ export function useApifyScraper() {
   const [results, setResults] = useState<ScrapeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const runScraper = async (filters: ScraperFilters) => {
+  const runScraper = async (filters: ScraperFilters): Promise<ScrapeResult | null> => {
     setLoading(true);
     setError(null);
     setResults(null);
@@ -58,7 +58,7 @@ export function useApifyScraper() {
       if (fnError) throw fnError;
       if (!data.success) throw new Error(data.error);
 
-      setResults(data);
+      setResults(data);\n      return data;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro ao executar mineração";
       setError(message);
