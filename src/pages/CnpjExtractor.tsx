@@ -24,7 +24,7 @@ const CnpjExtractor = () => {
   const [cnaeSearch, setCnaeSearch] = useState("");
   const [cnaeCode, setCnaeCode] = useState("");
   const [bairro, setBairro] = useState("");
-  const [maxPages, setMaxPages] = useState("5");
+  const [maxPages, setMaxPages] = useState("50");
   const [comTelefone, setComTelefone] = useState(true);
   const [somenteCelular, setSomenteCelular] = useState(true);
   const [mei, setMei] = useState(false);
@@ -70,7 +70,7 @@ const CnpjExtractor = () => {
       somente_celular: somenteCelular,
       mei,
       excluir_mei: excluirMei,
-      maxPages: parseInt(maxPages) || 5,
+      maxPages: Number.isFinite(Number(maxPages)) ? Math.max(0, parseInt(maxPages, 10) || 0) : 0,
     });
   };
 
@@ -231,11 +231,11 @@ const CnpjExtractor = () => {
 
                 {/* Max Pages */}
                 <div className="space-y-2">
-                  <Label>Máx. Páginas</Label>
+                  <Label>Máx. Páginas (0 = ilimitado)</Label>
                   <Input
                     type="number"
-                    min="1"
-                    max="50"
+                    min="0"
+                    placeholder="50 para ~1.000 registros"
                     value={maxPages}
                     onChange={(e) => setMaxPages(e.target.value)}
                   />
