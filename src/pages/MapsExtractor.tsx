@@ -17,9 +17,9 @@ const MapsExtractor = () => {
   const handleSearch = async (filters: SearchFilters) => {
     const locationLabel = [filters.bairro, filters.cidade, filters.estado].filter(Boolean).join(", ") || filters.cep;
     setSearchParams({ cidade: locationLabel, palavraChave: filters.palavraChave });
-    await runScraper(filters);
-    if (!error) {
-      toast({ title: "Mineração concluída!", description: "Leads extraídos com sucesso." });
+    const result = await runScraper(filters);
+    if (result) {
+      toast({ title: "Mineração concluída!", description: `${result.count} leads extraídos com sucesso.` });
     }
   };
 
