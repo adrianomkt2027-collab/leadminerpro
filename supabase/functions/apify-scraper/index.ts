@@ -49,11 +49,12 @@ function buildActorInput(body: Record<string, unknown>) {
   }
 
   const locationParts = [bairro, cidade, estado, cep].filter(Boolean).map(String);
-  const searchQuery = `${String(palavraChave)} em ${locationParts.join(", ")}`;
+  const searchQuery = String(palavraChave);
   const requestedMax = Number(maxResults);
 
   const actorInput: Record<string, unknown> = {
     searchStringsArray: [searchQuery],
+    locationQuery: locationParts.join(", "),
     language: "pt-BR",
     includeWebResults: false,
     searchMatching: "all",
