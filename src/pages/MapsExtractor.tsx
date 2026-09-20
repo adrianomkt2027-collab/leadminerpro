@@ -59,8 +59,11 @@ const MapsExtractor = () => {
         opportunity_score: l.opportunity_score,
       }));
 
-      const { error: lErr } = await supabase.from("leads").insert(leadsToInsert);
-      if (lErr) throw lErr;
+      const batchSize = 250;
+      for (let i = 0; i < leadsToInsert.length; i += batchSize) {
+        const { error: lErr } = await supabase.from("leads").insert(leadsToInsert.slice(i, i + batchSize));
+        if (lErr) throw lErr;
+      }
 
       toast({ title: "Salvo!", description: `${results.count} leads salvos no banco de dados.` });
     } catch (err: unknown) {
