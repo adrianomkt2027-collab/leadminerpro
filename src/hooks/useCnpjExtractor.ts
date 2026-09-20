@@ -67,32 +67,61 @@ export function useCnpjExtractor() {
       while ((unlimited || page <= maxPages) && hasMore) {
         if (controller.signal.aborted) break;
 
-        const { data, error } = await supabase.functions.invoke("cnpj-extractor", {
-          body: {
-            action: "search", uf: params.uf, municipio: params.municipio || "", bairro: params.bairro || "", cnae: params.cnae || "",
-            com_telefone: params.com_telefone ?? true, somente_celular: params.somente_celular ?? false,
-            mei: params.mei ?? false, excluir_mei: params.excluir_mei ?? false, page,
-          },
-        });
+        // Process a few pages in parallel. Each Edge Function invocation
+        // still limits Brasil API detail calls internally, preventing one
+        // giant request from hitting the function timeout.
+        const pageBatch: number[] = [];
+        for (let n = 0; n < 3 && (unlimited || page + n <= maxPages); n++) {
+          pageBatch.push(page + n);
+        }
 
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
+        const responses = await Promise.all(
+          pageBatch.map(async (pageNumber) => {
+            const { data, error } = await supabase.functions.invoke("cnpj-extractor", {
+              body: {
+                action: "search",
+                uf: params.uf,
+                municipio: params.municipio || "",
+                bairro: params.bairro || "",
+                cnae: params.cnae || "",
+                com_telefone: params.com_telefone ?? true,
+                somente_celular: params.somente_celular ?? false,
+                mei: params.mei ?? false,
+                excluir_mei: params.excluir_mei ?? false,
+                page: pageNumber,
+              },
+            });
+            if (error) throw new Error(error.message);
+            if (data?.error) throw new Error(data.error);
+            return {
+              page: pageNumber,
+              companies: (data?.companies || []) as CnpjCompany[],
+              total: Number(data?.total || 0),
+              hasMore: Boolean(data?.hasMore),
+            };
+          }),
+        );
 
-        const companies: CnpjCompany[] = data.companies || [];
-        const total = data.total || 0;
-        hasMore = data.hasMore || false;
-        allCompanies = [...allCompanies, ...companies];
+        responses.sort((a, b) => a.page - b.page);
+        for (const response of responses) {
+          if (controller.signal.aborted) break;
+          allCompanies = [...allCompanies, ...response.companies];
+          hasMore = response.hasMore;
+          setState((s) => ({
+            ...s,
+            companies: allCompanies,
+            progress: response.total > 0
+              ? Math.min(99, Math.round((allCompanies.length / response.total) * 100))
+              : (unlimited ? 0 : Math.min(99, Math.round((response.page / maxPages) * 100))),
+            total: response.total,
+            currentPage: response.page,
+          }));
+        }
 
-        setState((s) => ({
-          ...s,
-          companies: allCompanies,
-          progress: total > 0 ? Math.min(99, Math.round((allCompanies.length / total) * 100)) : (unlimited ? 0 : Math.round((page / maxPages) * 100)),
-          total,
-          currentPage: page,
-        }));
-
-        page++;
-        if ((unlimited || page <= maxPages) && hasMore) await new Promise((r) => setTimeout(r, 2000));
+        page += pageBatch.length;
+        if (!controller.signal.aborted && hasMore) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
       }
 
       setState((s) => ({ ...s, progress: 100 }));
