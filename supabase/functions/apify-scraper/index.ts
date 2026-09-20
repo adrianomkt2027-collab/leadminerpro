@@ -8,17 +8,12 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabase = createClient(
@@ -27,95 +22,87 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: claims, error: claimsErr } = await supabase.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
+    const { data: claims, error: claimsErr } = await supabase.auth.getClaims(authHeader.replace("Bearer ", ""));
     if (claimsErr || !claims?.claims) {
-      return new Response(
-        JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const userId = claims.claims.sub;
-
-    // Get user's API key from settings
-    const { data: settings } = await supabase
-      .from("user_settings")
-      .select("apify_api_key")
-      .eq("user_id", userId)
-      .maybeSingle();
-
+    const { data: settings } = await supabase.from("user_settings").select("apify_api_key").eq("user_id", userId).maybeSingle();
     const APIFY_API_TOKEN = settings?.apify_api_key;
+
     if (!APIFY_API_TOKEN) {
-      return new Response(
-        JSON.stringify({ error: "Configure sua chave da API Apify nas configurações (⚙️)" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Configure sua chave da API Apify nas configurações (⚙️)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { estado, cidade, bairro, cep, palavraChave, maxResults = 30, notaMinima, apenasComTelefone = true, apenasSemSite = false } = await req.json();
+    const {
+      estado, cidade, bairro, cep, palavraChave,
+      maxResults = 0,
+      notaMinima,
+      apenasComTelefone = true,
+      apenasSemSite = false,
+    } = await req.json();
 
     if (!palavraChave) {
-      return new Response(
-        JSON.stringify({ error: "Palavra-chave é obrigatória" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Palavra-chave é obrigatória" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
     if (!cidade && !estado && !bairro && !cep) {
-      return new Response(
-        JSON.stringify({ error: "Informe pelo menos uma localização (estado, cidade, bairro ou CEP)" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Informe pelo menos uma localização (estado, cidade, bairro ou CEP)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Build location string from most specific to least
     const locationParts: string[] = [];
     if (bairro) locationParts.push(bairro);
     if (cidade) locationParts.push(cidade);
     if (estado) locationParts.push(estado);
     if (cep) locationParts.push(cep);
-    const locationStr = locationParts.join(", ");
 
-    const searchQuery = `${palavraChave} em ${locationStr}`;
-    console.log("Searching:", searchQuery);
+    const searchQuery = `${palavraChave} em ${locationParts.join(", ")}`;
+    console.log("Searching:", searchQuery, "maxResults:", maxResults);
+
+    const actorInput: Record<string, unknown> = {
+      searchStringsArray: [searchQuery],
+      language: "pt-BR",
+      includeWebResults: false,
+      searchMatching: "all",
+      placeMinimumStars: "",
+      website: "allPlaces",
+      skipClosedPlaces: false,
+      scrapePlaceDetailPage: false,
+      scrapeTableReservationProvider: false,
+      scrapeDirectories: false,
+      maxQuestions: 0,
+      scrapeContacts: false,
+      scrapeSocialMediaProfiles: {
+        facebooks: false,
+        instagrams: false,
+        youtubes: false,
+        tiktoks: false,
+        twitters: false,
+      },
+      maximumLeadsEnrichmentRecords: 0,
+      maxReviews: 0,
+      reviewsSort: "newest",
+      reviewsFilterString: "",
+      reviewsOrigin: "all",
+      scrapeReviewsPersonalData: true,
+      scrapeImageAuthors: false,
+      allPlacesNoSearchAction: "",
+    };
+
+    // Apify supports an omitted maxCrawledPlacesPerSearch to keep scraping
+    // until the available results are exhausted. Positive values allow
+    // explicit targets such as 1k, 5k and 10k.
+    const requestedMax = Number(maxResults);
+    if (Number.isFinite(requestedMax) && requestedMax > 0) {
+      actorInput.maxCrawledPlacesPerSearch = Math.min(requestedMax, 10000);
+    }
 
     const runResponse = await fetch(
       `https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          searchStringsArray: [searchQuery],
-          maxCrawledPlacesPerSearch: maxResults,
-          language: "pt-BR",
-          includeWebResults: false,
-          searchMatching: "all",
-          placeMinimumStars: "",
-          website: "allPlaces",
-          skipClosedPlaces: false,
-          scrapePlaceDetailPage: false,
-          scrapeTableReservationProvider: false,
-          scrapeDirectories: false,
-          maxQuestions: 0,
-          scrapeContacts: false,
-          scrapeSocialMediaProfiles: {
-            facebooks: false,
-            instagrams: false,
-            youtubes: false,
-            tiktoks: false,
-            twitters: false,
-          },
-          maximumLeadsEnrichmentRecords: 0,
-          maxReviews: 0,
-          reviewsSort: "newest",
-          reviewsFilterString: "",
-          reviewsOrigin: "all",
-          scrapeReviewsPersonalData: true,
-          scrapeImageAuthors: false,
-          allPlacesNoSearchAction: "",
-        }),
+        body: JSON.stringify(actorInput),
       }
     );
 
@@ -127,7 +114,7 @@ serve(async (req) => {
     const rawData = await runResponse.json();
     const places = Array.isArray(rawData) ? rawData : [];
 
-    let filtered = places.filter((item: Record<string, unknown>) => {
+    const filtered = places.filter((item: Record<string, unknown>) => {
       const phone = (item.phone as string) || "";
       if (apenasComTelefone && phone.trim().length === 0) return false;
       if (notaMinima) {
@@ -146,9 +133,6 @@ serve(async (req) => {
       const hasSite = !!website;
       const categoryName = (item.categoryName as string) || "";
 
-      const painScore = calcPain(reviews, reviewsCount, hasSite);
-      const oppScore = calcOpp(reviews, reviewsCount, hasSite, categoryName);
-
       return {
         nome: (item.title as string) || "",
         email: (item.email as string) || (website ? `contato@${safeDomain(website)}` : ""),
@@ -163,33 +147,32 @@ serve(async (req) => {
         avaliacoes: reviewsCount,
         tem_site_proprio: hasSite,
         potencial_trafego: hasSite ? "Verificar" : "Sem site",
-        pain_score: painScore,
+        pain_score: calcPain(reviews, reviewsCount, hasSite),
         pico_funcionamento: formatHours(item.openingHours),
         ticket_medio: (item.priceLevel as string) || "N/A",
-        opportunity_score: oppScore,
+        opportunity_score: calcOpp(reviews, reviewsCount, hasSite, categoryName),
       };
     });
 
     const finalLeads = apenasSemSite ? leads.filter((l: Record<string, unknown>) => !l.tem_site_proprio) : leads;
 
-    return new Response(
-      JSON.stringify({ success: true, data: finalLeads, count: finalLeads.length }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({
+      success: true,
+      data: finalLeads,
+      count: finalLeads.length,
+      requested: requestedMax > 0 ? Math.min(requestedMax, 10000) : null,
+      unlimited: !(requestedMax > 0),
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: unknown) {
     console.error("Scraper error:", error);
     const message = error instanceof Error ? error.message : "Erro desconhecido";
-    return new Response(
-      JSON.stringify({ success: false, error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: false, error: message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
 
 function safeDomain(url: string): string {
   try { return new URL(url).hostname.replace("www.", ""); } catch { return ""; }
 }
-
 function calcPain(nota: number, av: number, hasSite: boolean): number {
   let s = 0;
   if (!hasSite) s += 30;
@@ -199,7 +182,6 @@ function calcPain(nota: number, av: number, hasSite: boolean): number {
   if (av < 50) s += 10;
   return Math.min(s, 100);
 }
-
 function calcOpp(nota: number, av: number, hasSite: boolean, nicho: string): number {
   let s = 50;
   if (!hasSite) s += 20;
@@ -208,7 +190,6 @@ function calcOpp(nota: number, av: number, hasSite: boolean, nicho: string): num
   if (nicho) s += 10;
   return Math.min(s, 100);
 }
-
 function formatHours(hours: unknown): string {
   if (!hours || !Array.isArray(hours)) return "N/A";
   try {
